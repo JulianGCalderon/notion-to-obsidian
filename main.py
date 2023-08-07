@@ -7,7 +7,6 @@ EXPORT: zipfile.Path = zipfile.Path("export.zip")
 
 def main():
     root = Extractor(EXPORT).extract()
-    # formatator(root).format()
 
 
 if __name__ == "__main__":

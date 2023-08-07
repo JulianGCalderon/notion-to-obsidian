@@ -4,6 +4,8 @@ import re
 import zipfile
 import shutil
 from urllib.parse import unquote
+import mistune
+from mistune.renderers.markdown import MarkdownRenderer
 
 from utils import remove_uuid
 
@@ -21,32 +23,13 @@ class Extractor:
         self.vault_path = Path(str(export_path)).parent / VAULT_FOLDER
         self.mappings = {}
 
-    def relative_to_export(self, file) -> PurePath:
-        return PurePath(str(file)).relative_to(str(self.export_path))
-
-    def relative_to_vault(self, file) -> PurePath:
-        return PurePath(str(file)).relative_to(self.vault_path)
-
     def extract(self) -> Path:
         shutil.rmtree(self.vault_path, ignore_errors=True)
 
         self.extract_folder(self.export_path)
-        self.fix_links(self.vault_path)
-
-        self.clean_empty_folders(self.vault_path)
+        self.format_folder(self.vault_path)
 
         return self.vault_path
-
-    def fix_links(self, root: Path):
-        for child in root.rglob("*.md"):
-            with open(child, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            relative_path = self.relative_to_vault(child)
-            content = LINK_PATTERN.sub(self.fix_link(relative_path), content)
-
-            with open(child, "w", encoding="utf-8") as f:
-                f.write(content)
 
     def extract_folder(self, export: zipfile.Path) -> Path:
         for child in export.iterdir():
@@ -67,57 +50,152 @@ class Extractor:
         full_new_path = path_for_attachment(full_old_path)
         relative_new_path = self.relative_to_vault(full_new_path)
 
-        self.mappings[str(relative_old_path)] = str(relative_new_path)
+        self.mappings[relative_old_path] = relative_new_path
 
-        with file.open("rb") as f:
-            content = f.read()
-
-        os.makedirs(full_new_path.parent, exist_ok=True)
-        with open(full_new_path, "wb") as f:
-            f.write(content)
+        self.extract_file_to(file, full_new_path)
 
     def extract_md(self, file: zipfile.Path):
         relative_path = remove_uuid(self.relative_to_export(file))
         full_path = self.vault_path / relative_path
 
+        self.extract_file_to(file, full_path)
+
+    def extract_file_to(self, file: zipfile.Path, destination: Path) -> Path:
+        with file.open("rb") as f:
+            content = f.read()
+
+        os.makedirs(destination.parent, exist_ok=True)
+        with open(destination, "wb") as f:
+            f.write(content)
+
+    def relative_to_export(self, file) -> PurePath:
+        return PurePath(str(file)).relative_to(str(self.export_path))
+
+    def relative_to_vault(self, file) -> PurePath:
+        return PurePath(str(file)).relative_to(str(self.vault_path))
+
+    def format_folder(self, folder: Path):
+        for child in folder.rglob("*.md"):
+            self.format_md(child)
+
+    def format_md(self, file: Path):
         with file.open("r", encoding="utf-8") as f:
             content = f.read()
 
-        os.makedirs(full_path.parent, exist_ok=True)
-        with open(full_path, "w", encoding="utf-8") as f:
+        relative_path = self.relative_to_vault(file)
+        markdown = mistune.create_markdown(
+            renderer=MarkdownFormatter(relative_path, self.mappings), plugins=["math"]
+        )
+        content = markdown(content)
+
+        with file.open("w", encoding="utf-8") as f:
             f.write(content)
 
-    def clean_empty_folders(self, folder: Path):
-        for child in folder.iterdir():
-            if child.is_dir():
-                self.clean_empty_folders(child)
 
-        if not any(folder.iterdir()):
-            folder.rmdir()
+class MarkdownFormatter(MarkdownRenderer):
+    def __init__(self, file, mappings):
+        self.file = file
+        self.mapping = mappings
 
-    def fix_link(self, relative_path: Path):
-        def fix_link(match):
-            title, link = match.groups()
+        super().__init__()
 
-            if URL_PATTERN.search(link):
-                return match.group(0)
+    def link(self, token, state):
+        title = self.render_children(token, state)
+        attrs = token["attrs"]
+        url = attrs["url"]
 
-            link = unquote(link)
-            link = remove_uuid(link)
-            link = relative_path.parent / link
-            link = os.path.normpath(link)
+        if URL_PATTERN.match(url):
+            return super().link(token, state)
 
-            if link in self.mappings:
-                link = self.mappings[link]
+        url = unquote(url)
+        url = remove_uuid(url)
+        url = self.file.parent / url
+        url = os.path.normpath(url)
+        url = Path(url)
 
-            link = link.replace("\\", "/")
+        if self.mapping.get(url):
+            url = self.mapping[url]
 
-            if link == title:
-                return f"[[{link}]]"
-            else:
-                return f"[[{link}|{title}]]"
+        url = str(url).replace("\\", "/")
 
-        return fix_link
+        return f"[[{url}|{title}]]"
+
+    def block_math(self, text, state):
+        raw = text["raw"]
+
+        raw = self.format_math(raw)
+
+        return f"$$\n{raw}\n$$\n"
+
+    def inline_math(self, text, state):
+        raw = text["raw"]
+
+        raw = self.format_math(raw)
+
+        return f"${raw}$"
+
+    def format_math(self, raw):
+        real_pattern = re.compile(r"\\R(?![a-zA-Z])")
+        raw = real_pattern.sub(r"\\mathbb{R}", raw)
+
+        lang_pattern = re.compile(r"\\lang(?![a-zA-Z])")
+        raw = lang_pattern.sub(r"\\langle", raw)
+
+        rang_pattern = re.compile(r"\\rang(?![a-zA-Z])")
+        raw = rang_pattern.sub(r"\\rangle", raw)
+
+        dag_pattern = re.compile(r"\\dag(?![a-zA-Z])")
+        raw = dag_pattern.sub(r"\\dagger", raw)
+
+        footnotesize_pattern = re.compile(r"\\footnotesize(?![a-zA-Z])")
+        raw = footnotesize_pattern.sub(r"\\small ", raw)
+
+        empty_pattern = re.compile(r"\\empty(?![a-zA-Z])")
+        raw = empty_pattern.sub(r"\\emptyset", raw)
+
+        natural_pattern = re.compile(r"\\N(?![a-zA-Z])")
+        raw = natural_pattern.sub(r"\\mathbb{N}", raw)
+
+        oiint_pattern = re.compile(r"\\oiint\s*\\limits_")
+        raw = oiint_pattern.sub(r"{\\subset\\!\\supset} \\llap{\\iint}_", raw)
+
+        bare_oiint_pattern = re.compile(r"\\oiint")
+        raw = bare_oiint_pattern.sub(r"{\\subset\\!\\supset} \\llap{\\iint}", raw)
+
+        infin_pattern = re.compile(r"\\infin(?![a-zA-Z])")
+        raw = infin_pattern.sub(r"\\infty", raw)
+
+        color_pattern = re.compile(r"\\(red|green|blue|gray)(?![a-zA-Z])")
+        raw = color_pattern.sub(r"\\color{\1}", raw)
+
+        integer_pattern = re.compile(r"\\Z(?![a-zA-Z])")
+        raw = integer_pattern.sub(r"\\mathbb{Z}", raw)
+
+        complex_pattern = re.compile(r"\\Complex(?![a-zA-Z])")
+        raw = complex_pattern.sub(r"\\mathbb{C}", raw)
+
+        epsilon_pattern = re.compile(r"\\Epsilon(?![a-zA-Z])")
+        raw = epsilon_pattern.sub(r"E", raw)
+
+        mathellipsis_pattern = re.compile(r"\\mathellipsis(?![a-zA-Z])")
+        raw = mathellipsis_pattern.sub(r"\\dots", raw)
+
+        tau_pattern = re.compile(r"\\Tau(?![a-zA-Z])")
+        raw = tau_pattern.sub(r" T", raw)
+
+        tg_pattern = re.compile(r"\\tg(?![a-zA-Z])")
+        raw = tg_pattern.sub(r"\\tan", raw)
+
+        chi_pattern = re.compile(r"\\Chi(?![a-zA-Z])")
+        raw = chi_pattern.sub(r"\\chi", raw)
+
+        tag_tex_pattern = re.compile(r"\\tag{\\text{(.*)}}")
+        raw = tag_tex_pattern.sub(r"\\tag{\1}", raw)
+
+        bold_pattern = re.compile(r"\\bold(?![a-zA-Z])")
+        raw = bold_pattern.sub(r"\\mathbf", raw)
+
+        return raw
 
 
 def path_for_attachment(file: Path) -> Path:
