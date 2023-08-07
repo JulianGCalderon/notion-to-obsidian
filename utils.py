@@ -6,7 +6,12 @@ def remove_uuid(file: PurePath) -> PurePath:
 
     parent, stem, suffix = file.parent, file.stem, file.suffix
 
-    clean = remove_folder_uuid(parent)
+    clean = PurePath()
+
+    for component in parent.parts:
+        component = try_remove_uuid(component)
+
+        clean /= component
 
     if suffix == ".md":
         stem = try_remove_uuid(file.stem)
@@ -14,17 +19,6 @@ def remove_uuid(file: PurePath) -> PurePath:
     clean /= stem
 
     return clean.with_suffix(file.suffix)
-
-
-def remove_folder_uuid(folder: PurePath) -> PurePath:
-    clean = PurePath()
-
-    for component in folder.parts:
-        component = try_remove_uuid(component)
-
-        clean /= component
-
-    return clean
 
 
 def try_remove_uuid(component: str) -> str:

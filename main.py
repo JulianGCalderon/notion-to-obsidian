@@ -1,12 +1,14 @@
+from pathlib import Path
 import zipfile
 
-from extractor import Extractor
+from converter import Converter
 
-EXPORT: zipfile.Path = zipfile.Path("export.zip")
+SRC: zipfile.Path = zipfile.Path("export.zip")
+DEST: zipfile.Path = Path("Vault")
 
 
 def main():
-    root = Extractor(EXPORT).extract()
+    Converter(SRC, DEST).convert()
 
 
 if __name__ == "__main__":
