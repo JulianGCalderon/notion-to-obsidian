@@ -3,15 +3,17 @@ from pathlib import PurePath
 
 def remove_uuid(file: PurePath) -> PurePath:
     file = PurePath(file)
-    print(file)
 
-    clean = remove_folder_uuid(file.parent)
+    parent, stem, suffix = file.parent, file.stem, file.suffix
 
-    if file.suffix == ".md":
-        clean /= try_remove_uuid(file.stem)
-        clean = clean.with_suffix(file.suffix)
+    clean = remove_folder_uuid(parent)
 
-    return clean
+    if suffix == ".md":
+        stem = try_remove_uuid(file.stem)
+
+    clean /= stem
+
+    return clean.with_suffix(file.suffix)
 
 
 def remove_folder_uuid(folder: PurePath) -> PurePath:
