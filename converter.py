@@ -23,7 +23,7 @@ class Converter:
     def convert(self):
         self.clean_folder(self.dest_path)
         self.extract_folder(self.src_path)
-        self.format(self.dest_path)
+        # self.format(self.dest_path)
         self.fix_markdown(self.dest_path)
         self.fix_links(self.dest_path)
 
@@ -161,23 +161,17 @@ def fix_markdown_content(content: str) -> str:
 
 
 def fix_structure_content(content):
-    img_pattern = re.compile(r"<img .*?\/>")
-    content = img_pattern.sub(r"", content)
+    # img_pattern = re.compile(r"<img .*?\/>")
+    # content = img_pattern.sub(r"", content)
 
-    aside_pattern = re.compile(r"<aside>\n*(.*?)\n*</aside>", re.DOTALL)
-    content = aside_pattern.sub(r" > [!note]\n > \1", content)
+    # aside_pattern = re.compile(r"<aside>\n*(.*?)\n*</aside>", re.DOTALL)
+    # content = aside_pattern.sub(r"> [!note]\n > \1", content)
 
     extra_asterisk = re.compile(r"\*{3}\**")
     content = extra_asterisk.sub(r"***", content)
 
     leading_header = re.compile(r"\A# .*\n*")
     content = leading_header.sub(r"", content)
-
-    scale_down_header = re.compile(r"^(#+) ", re.MULTILINE)
-    content = scale_down_header.sub(r"#\1 ", content)
-
-    escaped_asterisks = re.compile(r"(\\\*)*")
-    content = escaped_asterisks.sub(r"", content)
 
     return content
 
