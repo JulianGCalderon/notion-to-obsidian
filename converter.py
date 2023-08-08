@@ -31,6 +31,8 @@ class Converter:
         if not folder.exists():
             return
         for child in folder.iterdir():
+            if child.name == ".obsidian":
+                continue
             if child.is_dir():
                 shutil.rmtree(child)
 
