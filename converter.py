@@ -1,11 +1,13 @@
 import os
-from pathlib import Path, PurePath
-import zipfile
+import re
 import shutil
-import mistune
-from formatator import format_md_content
 
-from renderer import MyRenderer
+from pathlib import Path, PurePath
+from urllib.parse import unquote
+import zipfile
+
+import mdformat
+
 from utils import remove_uuid
 
 VAULT_FOLDER = "Vault"
@@ -21,8 +23,9 @@ class Converter:
     def convert(self):
         self.clean_folder(self.dest_path)
         self.extract_folder(self.src_path)
-        self.fix_links(self.dest_path)
         self.format(self.dest_path)
+        self.fix_links(self.dest_path)
+        self.fix_markdown(self.dest_path)
 
     def clean_folder(self, folder: Path):
         for child in folder.iterdir():
@@ -73,32 +76,62 @@ class Converter:
     def relative_to_dest(self, file) -> PurePath:
         return PurePath(str(file)).relative_to(str(self.dest_path))
 
-    def format(self, folder: Path):
-        for child in folder.rglob("*.md"):
-            self.format_md(child)
+    def format(self, vault: Path):
+        for child in vault.rglob("*.md"):
+            mdformat.file(child, extensions={"myst"})
 
-    def format_md(self, file: Path):
-        with file.open("r", encoding="utf-8") as f:
+    def fix_links(self, vault: Path):
+        for child in vault.rglob("*.md"):
+            self.fix_links_in_file(child)
+
+    def fix_links_in_file(self, file: Path):
+        with open(file, "r", encoding="utf-8") as f:
             content = f.read()
 
-        content = self.format_md_content(content, file)
+        URL_PATTERN = re.compile(r"\[(.*)\]\((.*)\)")
+        content = URL_PATTERN.sub(self.fix_link(self.relative_to_dest(file)), content)
 
-        with file.open("w", encoding="utf-8") as f:
+        with open(file, "w", encoding="utf-8") as f:
             f.write(content)
 
-    def format_md_content(self, content: str, file) -> str:
-        relative_path = self.relative_to_dest(file)
-        markdown = mistune.create_markdown(
-            renderer=MyRenderer(relative_path, self.mappings),
-            plugins=["math"],
-        )
-        content = markdown(content)
+    def fix_link(self, file: Path):
+        def _(match: re.Match) -> str:
+            title, link = match.groups()
 
-        content = format_md_content(content)
-        return content
+            HTTP_PATTERN = re.compile(r"^https?://")
+            if HTTP_PATTERN.match(link):
+                return match.group(0)
 
-    def fix_links(self, folder: Path):
-        pass
+            link = link.lstrip("<").rstrip(">")
+            link = unquote(link)
+            link = remove_uuid(link)
+            link = file.parent / link
+            link = os.path.normpath(link)
+
+            if self.mappings.get(link):
+                link = self.mappings[link]
+
+            if not Path(self.dest_path / link).exists():
+                return match.group(0)
+
+            link = link.replace("\\", "/")
+
+            return f"[[{link}]]"
+
+        return _
+
+    def fix_markdown(self, vault: Path):
+        for child in vault.rglob("*.md"):
+            self.fix_markdown_in_file(child)
+
+    def fix_markdown_in_file(self, file: Path):
+        with open(file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        content = fix_markdown_content(content)
+
+        with open(file, "w", encoding="utf-8") as f:
+            f.write(content)
 
 
 def path_for_attachment(file: Path) -> Path:
@@ -113,3 +146,93 @@ def path_for_attachment(file: Path) -> Path:
         possible_path = main_path.with_stem(f"{main_path.stem} {index}")
 
     return possible_path
+
+
+def fix_markdown_content(content: str) -> str:
+    content = fix_math_content(content)
+    content = fix_structure_content(content)
+
+    return content
+
+
+def fix_structure_content(content):
+    img_pattern = re.compile(r"<img .*?\/>")
+    content = img_pattern.sub(r"", content)
+
+    aside_pattern = re.compile(r"<aside>\n*(.*?)\n*</aside>", re.DOTALL)
+    content = aside_pattern.sub(r" > [!note]\n > \1", content)
+
+    extra_asterisk = re.compile(r"\*{3}\**")
+    content = extra_asterisk.sub(r"***", content)
+
+    leading_header = re.compile(r"\A# .*\n*")
+    content = leading_header.sub(r"", content)
+
+    scale_down_header = re.compile(r"^(#+) ", re.MULTILINE)
+    content = scale_down_header.sub(r"#\1 ", content)
+
+    return content
+
+
+def fix_math_content(content):
+    real_pattern = re.compile(r"\\R(?![a-zA-Z])")
+    content = real_pattern.sub(r"\\mathbb{R}", content)
+
+    lang_pattern = re.compile(r"\\lang(?![a-zA-Z])")
+    content = lang_pattern.sub(r"\\langle", content)
+
+    rang_pattern = re.compile(r"\\rang(?![a-zA-Z])")
+    content = rang_pattern.sub(r"\\rangle", content)
+
+    dag_pattern = re.compile(r"\\dag(?![a-zA-Z])")
+    content = dag_pattern.sub(r"\\dagger", content)
+
+    footnotesize_pattern = re.compile(r"\\footnotesize(?![a-zA-Z])")
+    content = footnotesize_pattern.sub(r"\\small ", content)
+
+    empty_pattern = re.compile(r"\\empty(?![a-zA-Z])")
+    content = empty_pattern.sub(r"\\emptyset", content)
+
+    natural_pattern = re.compile(r"\\N(?![a-zA-Z])")
+    content = natural_pattern.sub(r"\\mathbb{N}", content)
+
+    oiint_pattern = re.compile(r"\\oiint\s*\\limits_")
+    content = oiint_pattern.sub(r"{\\subset\\!\\supset} \\llap{\\iint}_", content)
+
+    bare_oiint_pattern = re.compile(r"\\oiint")
+    content = bare_oiint_pattern.sub(r"{\\subset\\!\\supset} \\llap{\\iint}", content)
+
+    infin_pattern = re.compile(r"\\infin(?![a-zA-Z])")
+    content = infin_pattern.sub(r"\\infty", content)
+
+    color_pattern = re.compile(r"\\(red|green|blue|gray)(?![a-zA-Z])")
+    content = color_pattern.sub(r"\\color{\1}", content)
+
+    integer_pattern = re.compile(r"\\Z(?![a-zA-Z])")
+    content = integer_pattern.sub(r"\\mathbb{Z}", content)
+
+    complex_pattern = re.compile(r"\\Complex(?![a-zA-Z])")
+    content = complex_pattern.sub(r"\\mathbb{C}", content)
+
+    epsilon_pattern = re.compile(r"\\Epsilon(?![a-zA-Z])")
+    content = epsilon_pattern.sub(r"E", content)
+
+    mathellipsis_pattern = re.compile(r"\\mathellipsis(?![a-zA-Z])")
+    content = mathellipsis_pattern.sub(r"\\dots", content)
+
+    tau_pattern = re.compile(r"\\Tau(?![a-zA-Z])")
+    content = tau_pattern.sub(r" T", content)
+
+    tg_pattern = re.compile(r"\\tg(?![a-zA-Z])")
+    content = tg_pattern.sub(r"\\tan", content)
+
+    chi_pattern = re.compile(r"\\Chi(?![a-zA-Z])")
+    content = chi_pattern.sub(r"\\chi", content)
+
+    tag_tex_pattern = re.compile(r"\\tag{\\text{(.*)}}")
+    content = tag_tex_pattern.sub(r"\\tag{\1}", content)
+
+    bold_pattern = re.compile(r"\\bold(?![a-zA-Z])")
+    content = bold_pattern.sub(r"\\mathbf", content)
+
+    return content
