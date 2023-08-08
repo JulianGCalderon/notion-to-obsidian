@@ -50,15 +50,7 @@ class Converter:
         relative_dest = remove_uuid(self.relative_to_src(src))
         absolute_dest = self.dest_path / relative_dest
 
-        if (absolute_dest.parent / absolute_dest.stem).is_dir():
-            absolute_new = (
-                absolute_dest.parent / absolute_dest.stem / absolute_dest.name
-            )
-            relative_new = self.relative_to_dest(absolute_new)
-            self.mappings[str(relative_dest)] = str(relative_new)
-            self.extract_to(src, absolute_new)
-        else:
-            self.extract_to(src, absolute_dest)
+        self.extract_to(src, absolute_dest)
 
     def extract_attachment(self, file: zipfile.Path):
         relative_old = remove_uuid(self.relative_to_src(file))
@@ -106,11 +98,6 @@ class Converter:
             HTTP_PATTERN = re.compile(r"^https?://")
             if HTTP_PATTERN.match(link):
                 return match.group(0)
-
-            for key, value in self.mappings.items():
-                if str(link) == value:
-                    link = Path(key)
-                    break
 
             link = link.lstrip("<").rstrip(">")
             link = unquote(link)
@@ -169,11 +156,19 @@ def fix_markdown_content(content: str) -> str:
 
 
 def fix_structure_content(content):
-    # img_pattern = re.compile(r"<img .*?\/>")
-    # content = img_pattern.sub(r"", content)
+    aside_pattern = re.compile(
+        r"( *)<aside>\s*(?:<img .*?\/>)?[^\s]? ([\s\S]*?)\s*<\/aside>"
+    )
 
-    # aside_pattern = re.compile(r"<aside>\n*(.*?)\n*</aside>", re.DOTALL)
-    # content = aside_pattern.sub(r"> [!note]\n > \1", content)
+    def sub_aside(match) -> str:
+        indent, content = match.groups()
+        output = f"{indent}> [!note]\n"
+        for line in content.splitlines():
+            output += f"{indent}> {line}\n"
+
+        return output
+
+    content = aside_pattern.sub(sub_aside, content)
 
     extra_asterisk = re.compile(r"\*{3}\**")
     content = extra_asterisk.sub(r"***", content)
