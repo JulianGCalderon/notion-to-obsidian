@@ -176,7 +176,7 @@ def fix_structure_content(content):
     scale_down_header = re.compile(r"^(#+) ", re.MULTILINE)
     content = scale_down_header.sub(r"#\1 ", content)
 
-    escaped_asterisks = re.compile(r"\\\**")
+    escaped_asterisks = re.compile(r"(\\\*)*")
     content = escaped_asterisks.sub(r"", content)
 
     return content
