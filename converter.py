@@ -6,8 +6,6 @@ from pathlib import Path, PurePath
 from urllib.parse import unquote
 import zipfile
 
-import mdformat
-
 from utils import remove_uuid
 
 VAULT_FOLDER = "Vault"
@@ -23,9 +21,8 @@ class Converter:
     def convert(self):
         self.clean_folder(self.dest_path)
         self.extract_folder(self.src_path)
-        # self.format(self.dest_path)
-        self.fix_markdown(self.dest_path)
         self.fix_links(self.dest_path)
+        self.format(self.dest_path)
 
     def clean_folder(self, folder: Path):
         if not folder.exists():
@@ -53,7 +50,15 @@ class Converter:
         relative_dest = remove_uuid(self.relative_to_src(src))
         absolute_dest = self.dest_path / relative_dest
 
-        self.extract_to(src, absolute_dest)
+        if (absolute_dest.parent / absolute_dest.stem).is_dir():
+            absolute_new = (
+                absolute_dest.parent / absolute_dest.stem / absolute_dest.name
+            )
+            relative_new = self.relative_to_dest(absolute_new)
+            self.mappings[str(relative_dest)] = str(relative_new)
+            self.extract_to(src, absolute_new)
+        else:
+            self.extract_to(src, absolute_dest)
 
     def extract_attachment(self, file: zipfile.Path):
         relative_old = remove_uuid(self.relative_to_src(file))
@@ -80,10 +85,6 @@ class Converter:
     def relative_to_dest(self, file) -> PurePath:
         return PurePath(str(file)).relative_to(str(self.dest_path))
 
-    def format(self, vault: Path):
-        for child in vault.rglob("*.md"):
-            mdformat.file(child, extensions={"myst"})
-
     def fix_links(self, vault: Path):
         for child in vault.rglob("*.md"):
             self.fix_links_in_file(child)
@@ -106,6 +107,11 @@ class Converter:
             if HTTP_PATTERN.match(link):
                 return match.group(0)
 
+            for key, value in self.mappings.items():
+                if str(link) == value:
+                    link = Path(key)
+                    break
+
             link = link.lstrip("<").rstrip(">")
             link = unquote(link)
             link = remove_uuid(link)
@@ -127,7 +133,7 @@ class Converter:
 
         return _
 
-    def fix_markdown(self, vault: Path):
+    def format(self, vault: Path):
         for child in vault.rglob("*.md"):
             self.fix_markdown_in_file(child)
 
