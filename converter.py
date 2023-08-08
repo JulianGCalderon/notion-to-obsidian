@@ -24,10 +24,12 @@ class Converter:
         self.clean_folder(self.dest_path)
         self.extract_folder(self.src_path)
         self.format(self.dest_path)
-        self.fix_links(self.dest_path)
         self.fix_markdown(self.dest_path)
+        self.fix_links(self.dest_path)
 
     def clean_folder(self, folder: Path):
+        if not folder.exists():
+            return
         for child in folder.iterdir():
             if child.is_dir():
                 shutil.rmtree(child)
@@ -116,7 +118,10 @@ class Converter:
 
             link = link.replace("\\", "/")
 
-            return f"[[{link}]]"
+            if title == link or title is None:
+                return f"[[{link}]]"
+            else:
+                return f"[[{link}|{title}]]"
 
         return _
 
@@ -170,6 +175,9 @@ def fix_structure_content(content):
 
     scale_down_header = re.compile(r"^(#+) ", re.MULTILINE)
     content = scale_down_header.sub(r"#\1 ", content)
+
+    escaped_asterisks = re.compile(r"\\\**")
+    content = escaped_asterisks.sub(r"", content)
 
     return content
 
