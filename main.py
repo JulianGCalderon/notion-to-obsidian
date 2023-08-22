@@ -4,8 +4,6 @@ import zipfile
 
 from converter import Converter
 
-SRC: zipfile.Path = zipfile.Path("export.zip")
-DEST: zipfile.Path = Path("Vault")
 
 parser = argparse.ArgumentParser(
     prog="Notion to Obsidian converter",
