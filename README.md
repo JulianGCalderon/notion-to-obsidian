@@ -29,7 +29,7 @@ El script soluciona alguno de los errores mencionados:
 Luego de ejecutar el Script, recomiendo algunas extensiones:
 
 - **Linter**: Para arreglar errores pequeños que puedan quedar luego de la conversión. En particular, tiene una opción para trasladar todos los títulos H1 a títulos H2, y así. Esto permite que el único título H1 de cada archivo sea el nombre del mismo.
-- **LangaugeToolIntegration**: Ofrece una mejor corrección ortográfica en español (mucho mejor que la opción nativa, y la ofrecida por Notion)
+- **LanguageToolIntegration**: Ofrece una mejor corrección ortográfica en español (mucho mejor que la opción nativa, y la ofrecida por Notion)
 - **Mousewheel Image Zoom**: Permite agrandar y achicar las imágenes de forma más cómoda.
 - **Obsidian Git**: Permite hacer una copia de seguridad de tus notas en la nube, a través de un repositorio de Git.
 
