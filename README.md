@@ -24,6 +24,12 @@ El script soluciona alguno de los errores mencionados:
 - No arregla los asteriscos de negrita e itálica, pero reduce la cantidad de asteriscos de 4+ a 3. Esto sigue siendo un problema, ya que Obsidian los reconocerá a todos como negrita. Los tuve que arreglar a mano, pero no es tan difícil.
 - Elimina el título del archivo al comienzo del archivo
 
+## Uso del Script
+
+Primero, exportamos nuestro *workspace* de Notion a Markdown. Obtendremos un archivo comprimido de extensión `.zip`.
+
+Ejecutamos el archivo `main.py`, debemos pasar por parámetro la dirección del comprimido, y la dirección deseada de destino. Opcionalmente, podemos incluir la opción `-m` para transformar las ecuaciones de Katex a MathJax
+
 ## Sugerencias
 
 Luego de ejecutar el Script, recomiendo algunas extensiones:
